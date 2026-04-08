@@ -273,6 +273,35 @@ header h1{
 .level-btn.active{border-color:var(--secondary);color:var(--secondary);background:rgba(91,227,212,.08)}
 .level-btn:hover:not(.active){border-color:var(--border);color:var(--text-1)}
 
+/* ===== DIFFICULTY TOGGLE (easy / memory) ===== */
+.diff-toggle{
+  display:flex;
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:var(--r-pill);
+  padding:4px;
+  margin-bottom:var(--s-3);
+  gap:4px;
+  box-shadow:var(--shadow-inset);
+}
+.diff-btn{
+  padding:8px 18px;
+  background:transparent;
+  border:none;
+  border-radius:var(--r-pill);
+  color:var(--text-2);
+  font-size:var(--fs-xs);
+  font-weight:var(--fw-semi);
+  min-height:38px;
+  transition:all var(--dur-fast) var(--ease-out);
+}
+.diff-btn:hover:not(.active){color:var(--text-0)}
+.diff-btn.active{
+  background:linear-gradient(180deg,var(--secondary),var(--secondary-600));
+  color:#062624;
+  box-shadow:0 2px 8px rgba(91,227,212,.3);
+}
+
 /* ===== STATS ===== */
 .stats{display:flex;gap:var(--s-2);margin-bottom:var(--s-3);flex-wrap:wrap;justify-content:center;width:100%;max-width:760px}
 .stat-box{
@@ -757,6 +786,12 @@ header h1{
   <button class="level-btn" data-level="3" type="button" role="radio" aria-checked="false">Nivel 3 · 16 pares</button>
 </div>
 
+<!-- ===== DIFFICULTY TOGGLE ===== -->
+<div class="diff-toggle" role="group" aria-label="Modo de juego">
+  <button id="btnEasy" class="diff-btn active" type="button" aria-pressed="true">😊 Fácil · cartas visibles</button>
+  <button id="btnHard" class="diff-btn" type="button" aria-pressed="false">🧠 Memoria · cartas ocultas</button>
+</div>
+
 <p id="instruction">Selecciona una tarjeta azul (elemento) y luego una verde (propiedad)</p>
 <div class="legend">
   <div class="legend-item"><span class="legend-dot dot-el"></span>Elemento</div>
@@ -1116,6 +1151,7 @@ const state = {
   achievements:new Set(),
   muted:false,
   musicOn:false,
+  easyMode:true,       // start in easy mode (cards visible) by default
   records:[],
   // Quiz
   quiz:{q:0,total:10,score:0,current:null,opts:[],lives:3}
@@ -1160,6 +1196,7 @@ function loadState(){
     state.xp = d.xp || 0;
     state.muted = !!d.muted;
     state.musicOn = !!d.musicOn;
+    if(typeof d.easyMode === 'boolean') state.easyMode = d.easyMode;
     state.collection = new Set(d.collection || []);
     state.achievements = new Set(d.achievements || []);
     state.records = d.records || [];
@@ -1172,6 +1209,7 @@ function saveState(){
       xp:state.xp,
       muted:state.muted,
       musicOn:state.musicOn,
+      easyMode:state.easyMode,
       collection:[...state.collection],
       achievements:[...state.achievements],
       records:state.records,
@@ -1233,36 +1271,56 @@ const Audio = (()=>{
     const c = ensure(); if(!c) return;
     resume();
     if(musicNode) return;
+    // Master gain with slow "breathing" via LFO on amplitude
     musicGain = c.createGain();
-    musicGain.gain.value = 0.025;
+    musicGain.gain.value = 0;
+    musicGain.gain.linearRampToValueAtTime(0.04, c.currentTime + 2);
+    // Low-pass filter for warmth
+    const filter = c.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    filter.Q.value = 0.5;
+    filter.connect(musicGain);
     musicGain.connect(c.destination);
-    const notes = [
-      {f:130.81,t:'sine'},
-      {f:196.00,t:'sine'},
-      {f:261.63,t:'triangle'}
-    ];
-    musicNode = notes.map(n=>{
+    // C major 7 chord — smooth, consonant, no frequency modulation
+    const notes = [130.81, 164.81, 196.00, 246.94, 329.63];
+    const oscs = notes.map((f,i)=>{
       const o = c.createOscillator();
-      o.type = n.t;
-      o.frequency.value = n.f;
-      const lfo = c.createOscillator();
-      const lfoGain = c.createGain();
-      lfo.frequency.value = 0.15;
-      lfoGain.gain.value = 2;
-      lfo.connect(lfoGain).connect(o.frequency);
-      o.connect(musicGain);
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = c.createGain();
+      g.gain.value = i===0 ? 0.6 : (i===4 ? 0.25 : 0.4);
+      o.connect(g).connect(filter);
       o.start();
-      lfo.start();
-      return {o,lfo};
+      return {o,g};
     });
+    // Slow amplitude LFO on master ("breathing")
+    const lfo = c.createOscillator();
+    const lfoGain = c.createGain();
+    lfo.frequency.value = 0.08;
+    lfoGain.gain.value = 0.015;
+    lfo.connect(lfoGain).connect(musicGain.gain);
+    lfo.start();
+    musicNode = {oscs, lfo, filter};
   }
   function stopMusic(){
     if(!musicNode) return;
+    const c = ctx;
     try{
-      musicNode.forEach(n=>{n.o.stop();n.lfo.stop()});
-    }catch(e){}
-    musicNode = null;
-    if(musicGain) musicGain.disconnect();
+      if(c && musicGain){
+        musicGain.gain.cancelScheduledValues(c.currentTime);
+        musicGain.gain.linearRampToValueAtTime(0, c.currentTime + 0.4);
+      }
+      setTimeout(()=>{
+        try{
+          musicNode.oscs.forEach(o=>o.o.stop());
+          musicNode.lfo.stop();
+          if(musicGain) musicGain.disconnect();
+          if(musicNode.filter) musicNode.filter.disconnect();
+        }catch(e){}
+        musicNode = null;
+      }, 450);
+    }catch(e){musicNode=null}
   }
   return {tone,correct,wrong,click,win,lose,startMusic,stopMusic,resume};
 })();
@@ -1425,6 +1483,8 @@ function renderGrid(){
     inner.appendChild(front);
     inner.appendChild(chk);
     wrap.appendChild(inner);
+    // EASY MODE: cards visible from the start (no memory required)
+    if(state.easyMode) wrap.classList.add('flipped');
     grid.appendChild(wrap);
   });
 }
@@ -1436,7 +1496,11 @@ function onGridClick(e){
   const wrap = e.target.closest('.card-wrap');
   if(!wrap || !wrap.parentElement) return;
   if(state.locked) return;
-  if(wrap.classList.contains('matched') || wrap.classList.contains('flipped')) return;
+  if(wrap.classList.contains('matched')) return;
+  // In hard (memory) mode, ignore already-flipped cards. In easy mode they are always flipped.
+  if(!state.easyMode && wrap.classList.contains('flipped')) return;
+  // In easy mode prevent clicking the same card as the first selection
+  if(state.easyMode && state.selected && state.selected.wrap===wrap) return;
   Audio.click();
   Audio.resume();
   const id = +wrap.dataset.id;
@@ -1538,8 +1602,13 @@ function onMiss(w1,w2,c1,c2){
     duration: 2200
   });
   setTimeout(()=>{
-    w1.classList.remove('flipped','selected','shake','err-flash');
-    w2.classList.remove('flipped','shake','err-flash');
+    w1.classList.remove('selected','shake','err-flash');
+    w2.classList.remove('shake','err-flash');
+    // Only flip back in memory mode (in easy mode they stay visible)
+    if(!state.easyMode){
+      w1.classList.remove('flipped');
+      w2.classList.remove('flipped');
+    }
     state.locked = false;
   }, 900);
 }
@@ -2177,7 +2246,8 @@ function setInstruction(){
     quiz:'Selecciona la respuesta correcta',
     elite:'👑 Modo olimpiada — lantánidos, actínidos y excepciones de Madelung'
   }[state.mode] || '';
-  $('instruction').textContent = txt;
+  const prefix = state.easyMode ? '😊 Fácil — todas las cartas visibles. ' : '🧠 Memoria — voltea cartas. ';
+  $('instruction').textContent = prefix + txt;
 }
 
 // ============================================================
@@ -2185,17 +2255,51 @@ function setInstruction(){
 // ============================================================
 function useHint(){
   if(state.hintCount<=0 || state.locked) return;
-  // Find an unmatched element card and pulse it
-  const wraps = document.querySelectorAll('.card-wrap:not(.matched)');
-  const els = [...wraps].filter(w=>{
-    const id = +w.dataset.id;
-    const c = state.cards.find(c=>c.id===id);
-    return c && c.type==='element';
-  });
-  if(!els.length) return;
-  const pick = els[Math.floor(Math.random()*els.length)];
-  pick.classList.add('hint-pulse');
-  setTimeout(()=>pick.classList.remove('hint-pulse'),1800);
+  if(state.mode==='quiz') return;
+  // Find a pair that hasn't been matched yet
+  const wraps = [...document.querySelectorAll('.card-wrap:not(.matched)')];
+  if(wraps.length<2) return;
+  // If user has one card selected, reveal its match
+  let elemWrap, propWrap;
+  if(state.selected){
+    const sel = state.selected.card;
+    const partner = state.cards.find(c => c.pairId===sel.pairId && c.id!==sel.id);
+    if(partner){
+      elemWrap = state.selected.wrap;
+      propWrap = wraps.find(w => +w.dataset.id===partner.id);
+    }
+  }
+  // Otherwise pick a random unmatched pair and reveal both
+  if(!propWrap){
+    const unmatchedIds = wraps.map(w=>+w.dataset.id);
+    const unmatchedCards = state.cards.filter(c=>unmatchedIds.includes(c.id));
+    const elements = unmatchedCards.filter(c=>c.type==='element');
+    if(!elements.length) return;
+    const pickEl = elements[Math.floor(Math.random()*elements.length)];
+    const pickPr = unmatchedCards.find(c=>c.pairId===pickEl.pairId && c.type==='property');
+    if(!pickPr) return;
+    elemWrap = wraps.find(w => +w.dataset.id===pickEl.id);
+    propWrap = wraps.find(w => +w.dataset.id===pickPr.id);
+  }
+  if(!elemWrap || !propWrap) return;
+  // Reveal both temporarily (flip them, pulse, then flip back if not in easy mode)
+  const wasEasy = state.easyMode;
+  const wasFlippedE = elemWrap.classList.contains('flipped');
+  const wasFlippedP = propWrap.classList.contains('flipped');
+  elemWrap.classList.add('flipped','hint-pulse');
+  propWrap.classList.add('flipped','hint-pulse');
+  // Show explicit message
+  toast('💡 Estos dos forman pareja — memorízalos', 'warn', {duration:2400});
+  state.locked = true;
+  setTimeout(()=>{
+    elemWrap.classList.remove('hint-pulse');
+    propWrap.classList.remove('hint-pulse');
+    if(!wasEasy){
+      if(!wasFlippedE) elemWrap.classList.remove('flipped');
+      if(!wasFlippedP) propWrap.classList.remove('flipped');
+    }
+    state.locked = false;
+  }, 2400);
   state.score = Math.max(0, state.score-5);
   state.hintCount--;
   $('btnHint').textContent = '💡 Pista ('+state.hintCount+')';
@@ -2234,6 +2338,24 @@ function bind(){
       initGame();
     });
   });
+  // Difficulty toggle
+  function setDifficulty(easy){
+    state.easyMode = easy;
+    $('btnEasy').classList.toggle('active', easy);
+    $('btnHard').classList.toggle('active', !easy);
+    $('btnEasy').setAttribute('aria-pressed', easy?'true':'false');
+    $('btnHard').setAttribute('aria-pressed', easy?'false':'true');
+    saveState();
+    initGame();
+  }
+  $('btnEasy').addEventListener('click', ()=>setDifficulty(true));
+  $('btnHard').addEventListener('click', ()=>setDifficulty(false));
+  // Init difficulty button visual state
+  $('btnEasy').classList.toggle('active', state.easyMode);
+  $('btnHard').classList.toggle('active', !state.easyMode);
+  $('btnEasy').setAttribute('aria-pressed', state.easyMode?'true':'false');
+  $('btnHard').setAttribute('aria-pressed', state.easyMode?'false':'true');
+
   // Buttons
   $('btnRestart').addEventListener('click', initGame);
   $('btnHint').addEventListener('click', useHint);
