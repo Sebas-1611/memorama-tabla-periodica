@@ -18,6 +18,7 @@
 </head>
 <body>
 
+<canvas id="bgCanvas" aria-hidden="true"></canvas>
 <canvas id="confettiCanvas" aria-hidden="true"></canvas>
 <canvas id="particleCanvas" aria-hidden="true"></canvas>
 
@@ -31,6 +32,46 @@
     <button class="secondary-btn" id="splashRules" type="button">¿Cómo se juega?</button>
   </div>
   <p class="credits">Pro v5 · Hecho con química y código</p>
+</div>
+
+<!-- ===== MENU INTERACTIVO ===== -->
+<div id="menuScreen" class="hidden" role="dialog" aria-labelledby="menuTitle">
+  <div class="menu-inner">
+    <header class="menu-header">
+      <h2 id="menuTitle">⚛️ Elige tu partida</h2>
+      <p class="menu-sub">Selecciona modo, nivel y dificultad para empezar</p>
+    </header>
+
+    <section class="menu-section" aria-labelledby="menuModesTitle">
+      <h3 id="menuModesTitle">1 · Modo de juego</h3>
+      <div class="menu-mode-grid" id="menuModeGrid" role="radiogroup" aria-label="Modos disponibles"></div>
+    </section>
+
+    <section class="menu-section" aria-labelledby="menuLevelsTitle">
+      <h3 id="menuLevelsTitle">2 · Nivel</h3>
+      <div class="menu-level-row" id="menuLevelRow" role="radiogroup" aria-label="Nivel">
+        <button type="button" class="menu-pill active" data-menu-level="1" aria-checked="true" role="radio">Nivel 1<small>8 pares</small></button>
+        <button type="button" class="menu-pill" data-menu-level="2" aria-checked="false" role="radio">Nivel 2<small>12 pares</small></button>
+        <button type="button" class="menu-pill" data-menu-level="3" aria-checked="false" role="radio">Nivel 3<small>16 pares</small></button>
+        <button type="button" class="menu-pill menu-pill-extreme" id="menuExtreme" aria-pressed="false" hidden>⚡ Extremo<small>30 segundos</small></button>
+      </div>
+    </section>
+
+    <section class="menu-section" aria-labelledby="menuDiffTitle">
+      <h3 id="menuDiffTitle">3 · Dificultad</h3>
+      <div class="menu-diff-row" role="radiogroup" aria-label="Dificultad">
+        <button type="button" class="menu-pill menu-pill-wide active" data-menu-diff="easy" aria-checked="true" role="radio">😊 Fácil<small>cartas visibles</small></button>
+        <button type="button" class="menu-pill menu-pill-wide" data-menu-diff="hard" aria-checked="false" role="radio">🧠 Memoria<small>cartas ocultas</small></button>
+      </div>
+    </section>
+
+    <div class="menu-summary" id="menuSummary" aria-live="polite"></div>
+
+    <div class="menu-actions">
+      <button type="button" class="btn-o" id="menuBack">← Atrás</button>
+      <button type="button" class="play-btn" id="menuStart">▶ Empezar</button>
+    </div>
+  </div>
 </div>
 
 <!-- ===== HEADER ===== -->
@@ -48,6 +89,7 @@
     <span id="starsTotal" class="xp-label" style="color:var(--primary)">★ 0</span>
   </div>
   <div class="top-actions">
+    <button id="btnBg" class="icon-btn" type="button" aria-label="Activar/desactivar fondo animado" title="Fondo animado">🌌</button>
     <button id="btnMusic" class="icon-btn" type="button" aria-label="Activar/desactivar música">🎵</button>
     <button id="btnMute" class="icon-btn" type="button" aria-label="Activar/desactivar efectos de sonido">🔊</button>
     <button id="btnA11y" class="icon-btn" type="button" aria-label="Accesibilidad y temas">⚙️</button>
@@ -105,14 +147,17 @@
 
 <!-- ===== ACTION ROW ===== -->
 <div class="action-row">
+  <button id="btnMenu" class="btn-o" type="button" title="Volver al menú">☰ Menú</button>
   <button id="btnRestart" class="btn-primary" type="button">↻ Reiniciar</button>
-  <button id="btnHint" class="btn-o" type="button" title="Pista (cuesta 5 puntos)">💡 Pista</button>
-  <button id="btnRules" class="btn-o" type="button">📖 Reglas</button>
-  <button id="btnTrends" class="btn-o" type="button">📊 Tendencias</button>
+  <button id="btnHelp" class="btn-o" type="button" title="Pistas, reglas y tendencias">📚 Ayuda</button>
   <button id="btnCol" class="btn-o" type="button">🔬 Mi Tabla</button>
   <button id="btnAch" class="btn-o" type="button">🏆 Logros</button>
   <button id="btnLB" class="btn-o" type="button">🥇 Récords</button>
   <button id="btnHist" class="btn-o" type="button">📜 Historial</button>
+  <!-- Botones legacy ocultos: el menú de Ayuda los dispara internamente -->
+  <button id="btnHint" class="btn-o" type="button" hidden aria-hidden="true">💡 Pista</button>
+  <button id="btnRules" class="btn-o" type="button" hidden aria-hidden="true">📖 Reglas</button>
+  <button id="btnTrends" class="btn-o" type="button" hidden aria-hidden="true">📊 Tendencias</button>
 </div>
 
 <!-- ===== POWER-UPS ROW ===== -->
@@ -158,6 +203,32 @@
 
 <!-- ===== TOAST ROOT ===== -->
 <div id="toastRoot" aria-live="polite" aria-atomic="false"></div>
+
+<!-- ===== MODAL: AYUDA / HELP HUB ===== -->
+<div class="modal-overlay" id="modalHelp" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="modal">
+    <button class="modal-close" data-close type="button" aria-label="Cerrar">✕</button>
+    <h2 id="helpTitle">📚 Ayuda</h2>
+    <p style="font-size:.85rem;color:var(--text-2);margin-bottom:14px">Atajos de aprendizaje en un solo sitio.</p>
+    <div class="help-grid">
+      <button type="button" class="help-card" id="helpHint">
+        <span class="hc-ico">💡</span>
+        <span class="hc-title">Pista</span>
+        <span class="hc-desc">Revela una pareja durante 2 segundos (cuesta 5 puntos)</span>
+      </button>
+      <button type="button" class="help-card" id="helpRules">
+        <span class="hc-ico">📖</span>
+        <span class="hc-title">Reglas</span>
+        <span class="hc-desc">Cómo se juega cada modo y el sistema de puntos</span>
+      </button>
+      <button type="button" class="help-card" id="helpTrends">
+        <span class="hc-ico">📊</span>
+        <span class="hc-title">Tendencias</span>
+        <span class="hc-desc">Resumen de tendencias periódicas (radio, EI, EN…)</span>
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== MODAL: RULES ===== -->
 <div class="modal-overlay" id="modalRules" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">

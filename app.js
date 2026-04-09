@@ -374,7 +374,7 @@ const state = {
   unlocked:{basico:3,avanzado:3,propiedades:3,iones:3,config:3,contrarreloj:3,quiz:3,elite:3,enlaces:1,olimpiada:1,repaso:1,daily:1},
   starsByMode:{},      // {modo: {1:n,2:n,3:n}}
   dailyDone:null,      // {seed,score}
-  a11y:{theme:'dark',scale:1,reduceMotion:false},
+  a11y:{theme:'dark',scale:1,reduceMotion:false,bgAnimated:true},
   audioVol:{music:0.5,fx:0.6},
   firstPlay:true,
   records:[],
@@ -603,6 +603,108 @@ const AudioEngine = (()=>{
     [261.63, 329.63, 392.00, 523.25].forEach((f,i)=>setTimeout(()=>tone(f, 0.4, 'triangle', 0.16*_fxVol), i*40));
   }
   return {tone,correct,wrong,click,win,lose,startMusic,stopMusic,resume,whoosh,riser,stinger,setFxVol,setMusicVol};
+})();
+
+// ============================================================
+// BG ENGINE — fondo animado de símbolos químicos
+// ============================================================
+const BgEngine = (()=>{
+  const SYMBOLS = ['H','He','Li','Be','C','N','O','F','Ne','Na','Mg','Al','Si','P','S','Cl','Ar','K','Ca','Fe','Cu','Zn','Br','Ag','Au','Hg','Pb','I','U'];
+  let canvas, ctx, dpr=1, w=0, h=0;
+  let particles = [];
+  let raf = null;
+  let animated = true;
+  let initialized = false;
+
+  function resize(){
+    if(!canvas) return;
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    w = window.innerWidth;
+    h = window.innerHeight;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = w+'px';
+    canvas.style.height = h+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function spawn(){
+    const count = Math.max(14, Math.min(28, Math.floor((w*h)/55000)));
+    particles = [];
+    for(let i=0;i<count;i++){
+      particles.push({
+        x: Math.random()*w,
+        y: Math.random()*h,
+        sym: SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)],
+        size: 28 + Math.random()*48,
+        vx: (Math.random()-0.5)*0.18,
+        vy: -0.08 - Math.random()*0.22,
+        rot: (Math.random()-0.5)*0.4,
+        vrot: (Math.random()-0.5)*0.002,
+        hue: 200 + Math.random()*80, // azul-violeta
+        alpha: 0.08 + Math.random()*0.14,
+        pulse: Math.random()*Math.PI*2
+      });
+    }
+  }
+  function drawOne(p){
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    const grad = ctx.createLinearGradient(0,-p.size,0,p.size);
+    grad.addColorStop(0, 'hsla('+p.hue+',80%,75%,'+(p.alpha*1.2)+')');
+    grad.addColorStop(1, 'hsla('+(p.hue+40)+',70%,55%,'+(p.alpha*0.6)+')');
+    ctx.fillStyle = grad;
+    ctx.font = 'bold '+p.size+'px "Space Mono", ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'hsla('+p.hue+',90%,70%,'+(p.alpha*0.8)+')';
+    ctx.shadowBlur = 18;
+    ctx.fillText(p.sym, 0, 0);
+    ctx.restore();
+  }
+  function frame(){
+    ctx.clearRect(0,0,w,h);
+    for(const p of particles){
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vrot;
+      p.pulse += 0.01;
+      // wrap
+      if(p.y < -p.size) { p.y = h + p.size; p.x = Math.random()*w; }
+      if(p.x < -p.size) p.x = w + p.size;
+      if(p.x > w + p.size) p.x = -p.size;
+      drawOne(p);
+    }
+    if(animated) raf = requestAnimationFrame(frame);
+  }
+  function drawStatic(){
+    ctx.clearRect(0,0,w,h);
+    for(const p of particles) drawOne(p);
+  }
+  function init(){
+    if(initialized) return;
+    canvas = document.getElementById('bgCanvas');
+    if(!canvas) return;
+    ctx = canvas.getContext('2d');
+    initialized = true;
+    resize();
+    spawn();
+    window.addEventListener('resize', ()=>{ resize(); spawn(); if(!animated) drawStatic(); });
+    if(animated) raf = requestAnimationFrame(frame);
+    else drawStatic();
+  }
+  function setAnimated(on){
+    animated = !!on;
+    document.body.classList.toggle('bg-static', !animated);
+    if(!initialized) return;
+    if(animated){
+      if(!raf) raf = requestAnimationFrame(frame);
+    }else{
+      if(raf){ cancelAnimationFrame(raf); raf = null; }
+      drawStatic();
+    }
+  }
+  return { init, setAnimated };
 })();
 
 // ============================================================
@@ -1920,6 +2022,20 @@ function answerQuiz(btn,opt){
     allBtns.forEach(b=>{if(b.textContent===state.quiz.correct)b.classList.add('correct')});
     state.errors++;
     AudioEngine.wrong();
+    vibrate(60);
+    // Sistema de vidas también para modos quiz-based que lo usan (olimpiada)
+    const usesLives = ['elite','contrarreloj','olimpiada','repaso','daily'].includes(state.mode);
+    if(usesLives){
+      // Asegura que la caja de vidas sea visible (por si quedó oculta)
+      const lb = $('livesBox'); if(lb) lb.style.display = '';
+      state.lives = Math.max(0, (typeof state.lives==='number'?state.lives:state.maxLives) - 1);
+      updateLivesUI();
+      toast('💔 Vida perdida ('+state.lives+' restantes)','bad',{duration:1400});
+      if(state.lives<=0){
+        setTimeout(()=>endGame(false), 900);
+        return;
+      }
+    }
   }
   state.quiz.q++;
   $('statMatches').textContent = state.matched+'/'+state.quiz.total;
@@ -2070,21 +2186,175 @@ function useHint(){
 }
 
 // ============================================================
+// MENU INTERACTIVO
+// ============================================================
+const MENU_MODES = [
+  {id:'basico',      icon:'🟡', label:'Básico',         desc:'Símbolo ↔ nombre del elemento'},
+  {id:'avanzado',    icon:'🔴', label:'Avanzado',       desc:'Símbolo ↔ número atómico, período y grupo'},
+  {id:'propiedades', icon:'🔵', label:'Propiedades',    desc:'EN, radio y energía de ionización'},
+  {id:'iones',       icon:'⚡', label:'Iones',          desc:'Estados de oxidación más comunes'},
+  {id:'config',      icon:'🧪', label:'Config. e⁻',     desc:'Configuración electrónica de valencia'},
+  {id:'contrarreloj',icon:'⏱️', label:'Contrarreloj',   desc:'Propiedades con tiempo límite'},
+  {id:'quiz',        icon:'🧠', label:'Quiz',           desc:'Opción múltiple sobre elementos'},
+  {id:'elite',       icon:'👑', label:'Élite',          desc:'Lantánidos, actínidos y excepciones'},
+  {id:'enlaces',     icon:'🔗', label:'Enlaces',        desc:'Tipos de enlace e interacciones'},
+  {id:'olimpiada',   icon:'🏆', label:'Olimpiada',      desc:'Problemas estilo olimpiada'},
+  {id:'repaso',      icon:'🔁', label:'Repaso',         desc:'Errores anteriores que cometiste'},
+  {id:'daily',       icon:'🌟', label:'Reto del día',   desc:'Una partida única cada día'}
+];
+const _menuSel = {mode:'basico', level:1, easy:true, extreme:false};
+
+function buildMenu(){
+  const grid = $('menuModeGrid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  MENU_MODES.forEach(m=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'menu-mode-card';
+    b.setAttribute('role','radio');
+    b.setAttribute('aria-checked','false');
+    b.dataset.menuMode = m.id;
+    b.innerHTML = '<span class="mc-title">'+m.icon+' '+m.label+'</span><span class="mc-desc">'+m.desc+'</span>';
+    b.addEventListener('click', ()=>selectMenuMode(m.id));
+    grid.appendChild(b);
+  });
+  // Level pills
+  document.querySelectorAll('#menuLevelRow [data-menu-level]').forEach(b=>{
+    b.addEventListener('click', ()=>selectMenuLevel(+b.dataset.menuLevel));
+  });
+  $('menuExtreme').addEventListener('click', ()=>{
+    _menuSel.extreme = !_menuSel.extreme;
+    $('menuExtreme').classList.toggle('active', _menuSel.extreme);
+    $('menuExtreme').setAttribute('aria-pressed', _menuSel.extreme?'true':'false');
+    updateMenuSummary();
+  });
+  // Difficulty pills
+  document.querySelectorAll('[data-menu-diff]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      _menuSel.easy = (b.dataset.menuDiff === 'easy');
+      document.querySelectorAll('[data-menu-diff]').forEach(x=>{
+        const on = x.dataset.menuDiff === b.dataset.menuDiff;
+        x.classList.toggle('active', on);
+        x.setAttribute('aria-checked', on?'true':'false');
+      });
+      updateMenuSummary();
+    });
+  });
+}
+
+function selectMenuMode(mode){
+  _menuSel.mode = mode;
+  document.querySelectorAll('#menuModeGrid .menu-mode-card').forEach(c=>{
+    const on = c.dataset.menuMode === mode;
+    c.classList.toggle('active', on);
+    c.setAttribute('aria-checked', on?'true':'false');
+  });
+  // Mostrar Extremo solo en contrarreloj
+  const ext = $('menuExtreme');
+  if(mode === 'contrarreloj'){
+    ext.hidden = false;
+  }else{
+    ext.hidden = true;
+    _menuSel.extreme = false;
+    ext.classList.remove('active');
+    ext.setAttribute('aria-pressed','false');
+  }
+  // Algunos modos no usan nivel (quiz/olimpiada/enlaces igual usan, daily/repaso fijos)
+  updateMenuSummary();
+}
+
+function selectMenuLevel(level){
+  _menuSel.level = level;
+  document.querySelectorAll('#menuLevelRow [data-menu-level]').forEach(b=>{
+    const on = +b.dataset.menuLevel === level;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', on?'true':'false');
+  });
+  updateMenuSummary();
+}
+
+function updateMenuSummary(){
+  const m = MENU_MODES.find(x=>x.id===_menuSel.mode) || MENU_MODES[0];
+  const diffTxt = _menuSel.easy ? '😊 Fácil' : '🧠 Memoria';
+  const lvlTxt = (_menuSel.mode==='contrarreloj' && _menuSel.extreme)
+    ? '⚡ Extremo (30s)'
+    : 'Nivel '+_menuSel.level;
+  $('menuSummary').innerHTML = 'Vas a jugar <strong>'+m.icon+' '+m.label+'</strong> · <strong>'+lvlTxt+'</strong> · <strong>'+diffTxt+'</strong>';
+}
+
+function openMenu(){
+  // Sincroniza selección con el estado actual
+  _menuSel.mode = state.mode || 'basico';
+  _menuSel.level = state.level || 1;
+  _menuSel.easy = state.easyMode !== false;
+  _menuSel.extreme = !!state.extremeMode;
+  selectMenuMode(_menuSel.mode);
+  selectMenuLevel(_menuSel.level);
+  document.querySelectorAll('[data-menu-diff]').forEach(x=>{
+    const on = (x.dataset.menuDiff==='easy') === _menuSel.easy;
+    x.classList.toggle('active', on);
+    x.setAttribute('aria-checked', on?'true':'false');
+  });
+  if(_menuSel.mode==='contrarreloj' && _menuSel.extreme){
+    $('menuExtreme').classList.add('active');
+    $('menuExtreme').setAttribute('aria-pressed','true');
+  }
+  updateMenuSummary();
+  $('menuScreen').classList.remove('hidden');
+}
+
+function closeMenu(){
+  // Aplica selección al estado del juego
+  state.mode = _menuSel.mode;
+  state.level = _menuSel.level;
+  state.easyMode = _menuSel.easy;
+  state.extremeMode = (_menuSel.mode==='contrarreloj') ? _menuSel.extreme : false;
+  // Sincroniza clases activas en los botones (ocultos) que la lógica del juego sigue mirando
+  document.querySelectorAll('.mode-btn').forEach(x=>x.classList.toggle('active', x.dataset.mode===state.mode));
+  document.querySelectorAll('.level-btn[data-level]').forEach(x=>{
+    const on = +x.dataset.level === state.level;
+    x.classList.toggle('active', on);
+    x.setAttribute('aria-checked', on?'true':'false');
+  });
+  const be=$('btnEasy'), bh=$('btnHard');
+  if(be && bh){
+    be.classList.toggle('active', state.easyMode);
+    bh.classList.toggle('active', !state.easyMode);
+    be.setAttribute('aria-pressed', state.easyMode?'true':'false');
+    bh.setAttribute('aria-pressed', state.easyMode?'false':'true');
+  }
+  saveState();
+  $('menuScreen').classList.add('hidden');
+}
+
+// ============================================================
 // EVENT BINDINGS
 // ============================================================
 function bind(){
-  // Splash
+  // Splash → abre menú interactivo
   $('splashPlay').addEventListener('click', ()=>{
     $('splash').classList.add('hidden');
     AudioEngine.resume();
     if(state.musicOn) AudioEngine.startMusic();
+    openMenu();
+  });
+  $('splashRules').addEventListener('click', ()=>openModal('modalRules'));
+
+  // Menu interactivo
+  buildMenu();
+  $('menuStart').addEventListener('click', ()=>{
+    closeMenu();
     initGame();
-    // Lanzar onboarding la primera vez
     if(state.firstPlay){
       setTimeout(()=>{ $('onboarding').classList.add('open'); }, 300);
     }
   });
-  $('splashRules').addEventListener('click', ()=>openModal('modalRules'));
+  $('menuBack').addEventListener('click', ()=>{
+    closeMenu();
+    $('splash').classList.remove('hidden');
+  });
+  $('btnMenu').addEventListener('click', openMenu);
 
   // Modes
   document.querySelectorAll('.mode-btn').forEach(b=>{
@@ -2151,6 +2421,20 @@ function bind(){
   $('btnRules').addEventListener('click', ()=>openModal('modalRules'));
   $('btnTrends').addEventListener('click', ()=>{
     $('trendsPanel').classList.toggle('open');
+  });
+  // ===== Help hub =====
+  $('btnHelp').addEventListener('click', ()=>openModal('modalHelp'));
+  $('helpHint').addEventListener('click', ()=>{ closeModal('modalHelp'); useHint(); });
+  $('helpRules').addEventListener('click', ()=>{ closeModal('modalHelp'); openModal('modalRules'); });
+  $('helpTrends').addEventListener('click', ()=>{ closeModal('modalHelp'); $('trendsPanel').classList.add('open'); });
+  // ===== Fondo animado toggle =====
+  $('btnBg').addEventListener('click', ()=>{
+    state.a11y.bgAnimated = !state.a11y.bgAnimated;
+    BgEngine.setAnimated(state.a11y.bgAnimated);
+    $('btnBg').classList.toggle('bg-on', state.a11y.bgAnimated);
+    $('btnBg').setAttribute('aria-pressed', state.a11y.bgAnimated?'true':'false');
+    toast(state.a11y.bgAnimated?'🌌 Fondo animado activado':'🪨 Fondo estático','info',{duration:1200});
+    saveState();
   });
   $('btnCol').addEventListener('click', ()=>{renderCollection();openModal('modalCollection')});
   $('btnAch').addEventListener('click', ()=>{renderAch();openModal('modalAch')});
@@ -2358,6 +2642,12 @@ updateXpBar();
 updateLevelLocks();
 $('btnMute').textContent = state.muted?'🔇':'🔊';
 $('btnMusic').style.opacity = state.musicOn?'1':'0.5';
+// Inicializa fondo animado de elementos químicos
+if(typeof state.a11y.bgAnimated !== 'boolean') state.a11y.bgAnimated = true;
+BgEngine.init();
+BgEngine.setAnimated(state.a11y.bgAnimated && !isReducedMotion());
+$('btnBg').classList.toggle('bg-on', state.a11y.bgAnimated);
+$('btnBg').setAttribute('aria-pressed', state.a11y.bgAnimated?'true':'false');
 bind();
 
 // Show splash on first load (not when rebooted via restart)
