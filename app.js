@@ -94,10 +94,10 @@ const ELEMENTS = [
     en:1.55,ie:717,radius:127,ea:0,
     hints:{en:'Moderada',ie:'3d⁵ semillena, estable',radius:'Mediano',ea:'No favorable'},
     expl:'El Mn tiene 3d⁵ semilleno, lo que le da estabilidad extra y muchos estados de oxidación: +2 (más estable), +4 (MnO₂), +6 y +7 (KMnO₄ violeta intenso, fuerte oxidante).'},
-  {z:26,sym:'Fe',name:'Hierro',mass:55.845,group:8,period:4,block:'d',family:'metal-transicion',config:'[Ar]3d⁶4s²',ox:[+2,+3,+6],
+  {z:26,sym:'Fe',name:'Hierro',mass:55.845,group:8,period:4,block:'d',family:'metal-transicion',config:'[Ar]3d⁶4s²',ox:[+2,+3],
     en:1.83,ie:762,radius:126,ea:-16,
     hints:{en:'Típica de metal de transición',ie:'Aumenta respecto al Mn',radius:'Mediano',ea:'Moderada'},
-    expl:'El hierro forma Fe²⁺ y Fe³⁺. Es el componente central de la hemoglobina (transporte de O₂) y el metal más usado por la humanidad. Su núcleo tiene la mayor energía de enlace por nucleón.'},
+    expl:'El hierro forma Fe²⁺ y Fe³⁺ (los más comunes). Es el componente central de la hemoglobina (transporte de O₂) y el metal más usado por la humanidad. Su núcleo tiene la mayor energía de enlace por nucleón.'},
   {z:29,sym:'Cu',name:'Cobre',mass:63.546,group:11,period:4,block:'d',family:'metal-transicion',config:'[Ar]3d¹⁰4s¹',ox:[+1,+2],
     en:1.90,ie:746,radius:128,ea:-119,
     hints:{en:'Moderada-alta',ie:'Configuración especial 3d¹⁰4s¹',radius:'Mediano',ea:'Capta moderadamente'},
@@ -150,6 +150,10 @@ const ELEMENTS = [
     en:1.14,ie:533,radius:181,ea:-50,
     hints:{en:'Baja, lantánido',ie:'Baja',radius:'Grande',ea:'Moderada'},
     expl:'El neodimio se usa en los imanes permanentes más fuertes conocidos (Nd₂Fe₁₄B). Su estado característico es +3, típico de los lantánidos.'},
+  {z:64,sym:'Gd',name:'Gadolinio',mass:157.25,group:3,period:6,block:'f',family:'lantanido',config:'[Xe]4f⁷5d¹6s²',ox:[+3],
+    en:1.20,ie:593,radius:180,ea:-50,
+    hints:{en:'Baja, lantánido',ie:'Baja-moderada',radius:'Grande',ea:'Moderada'},
+    expl:'El gadolinio es una excepción de Madelung análoga al Cr/Mn: su 4f⁷ semilleno + 5d¹ es más estable que 4f⁸. Tiene propiedades magnéticas únicas y se usa como contraste en resonancias magnéticas (MRI).'},
   {z:92,sym:'U',name:'Uranio',mass:238.029,group:3,period:7,block:'f',family:'actinido',config:'[Rn]5f³6d¹7s²',ox:[+3,+4,+5,+6],
     en:1.38,ie:598,radius:196,ea:-51,
     hints:{en:'Moderada, actínido',ie:'Moderada',radius:'Muy grande',ea:'Moderada'},
@@ -331,7 +335,7 @@ const POOLS = {
   // Level 3: todo + lantánidos + posttransición + período 5
   3: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,47,50,53,54,55,56,74,78,79,80,82],
   // Élite: anomalías de Madelung, lantánidos, efectos relativistas
-  elite: [24,25,29,30,41,42,44,45,46,47,57,58,60,72,73,74,78,79,80,82,83,92]
+  elite: [24,25,29,30,41,42,44,45,46,47,57,58,60,64,72,73,74,78,79,80,82,83,92]
 };
 
 // ============================================================
@@ -418,7 +422,8 @@ function loadState(){
     const raw = localStorage.getItem('ptv5');
     if(!raw) return;
     const d = JSON.parse(raw);
-    state.xp = d.xp || 0;
+    if(!d || typeof d !== 'object' || Array.isArray(d)) return;
+    state.xp = (typeof d.xp === 'number' && d.xp >= 0) ? d.xp : 0;
     state.muted = !!d.muted;
     state.musicOn = !!d.musicOn;
     if(typeof d.easyMode === 'boolean') state.easyMode = d.easyMode;
@@ -820,6 +825,15 @@ function dailySeed(){
   const d = new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+function timeUntilNextDaily(){
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(24,0,0,0); // próxima medianoche local
+  const ms = next - now;
+  const h = Math.floor(ms/3600000);
+  const m = Math.floor((ms%3600000)/60000);
+  return h+'h '+m+'m';
+}
 
 function buildCards(){
   const els = getElementsForMode();
@@ -1042,6 +1056,14 @@ function onMatch(w1,w2,el){
   if(state.streak>=10 && !state.achievements.has('combo_10')){
     state.achievements.add('combo_10');unlockAch('combo_10');
   }
+  // Combo épico — feedback visual escalado
+  if(state.streak===5){
+    toast('🔥 ¡Combo x'+state.multiplier+'! En llamas','good',{duration:1600});
+    if(!isReducedMotion()) fireConfetti();
+  }else if(state.streak===10){
+    toast('⚡ ¡IMPARABLE! Racha de 10','good',{duration:2000});
+    if(!isReducedMotion()){ fireConfetti(); setTimeout(fireConfetti, 200); }
+  }
   setTimeout(()=>{state.locked=false}, 350);
 }
 
@@ -1077,10 +1099,17 @@ function onMiss(w1,w2,c1,c2){
   const el = c1.type==='element' ? c1.el : c2.el;
   const propC = c1.type==='property' ? c1 : c2;
   const propInfo = renderPropCard(propC);
-  toast('No coinciden. ' + el.sym + ' no tiene ' + propInfo.tag.toLowerCase() + ' = ' + propInfo.value, 'bad', {
+  // Identifica a qué elemento SÍ pertenece esa propiedad (mayor valor pedagógico)
+  const propOwner = state.cards.find(c => c.type==='element' && c.el && propC.el && c.el.z===propC.el.z);
+  const ownerSym = propOwner && propOwner.el ? propOwner.el.sym + ' ('+propOwner.el.name+')' : '';
+  const msg = ownerSym
+    ? 'No coinciden. '+propInfo.tag+' = '+propInfo.value+' pertenece a '+ownerSym+', no a '+el.sym
+    : 'No coinciden. '+el.sym+' no tiene '+propInfo.tag.toLowerCase()+' = '+propInfo.value;
+  toast(msg, 'bad', {
     more: ()=>showWhy(el, propC),
-    duration: 2200
+    duration: 2600
   });
+  spawnScorePop('-3');
   setTimeout(()=>{
     w1.classList.remove('selected','shake','err-flash');
     w2.classList.remove('shake','err-flash');
@@ -1394,6 +1423,17 @@ function updatePowerupsUI(){
     $('puFreeze').disabled = state.powerups.freeze<=0;
     $('puDouble').disabled = state.powerups.double<=0;
   }
+  // Indicador visual cuando ✖2 está armado
+  const dbl = $('puDouble');
+  if(dbl){
+    dbl.classList.toggle('pu-armed', !!(state.powerups && state.powerups._doubleNext));
+  }
+  // Ocultar fila de power-ups en modo Fácil (no aportan nada útil ahí) y en quiz
+  const row = $('powerupsRow');
+  if(row){
+    const hide = state.easyMode || state.mode==='quiz' || state.mode==='olimpiada' || state.mode==='enlaces';
+    row.style.display = hide ? 'none' : '';
+  }
 }
 function powerupReveal(){
   if(!state.powerups || state.powerups.reveal<=0 || state.locked) return;
@@ -1669,7 +1709,10 @@ function closeModal(id){
   // Limpiar listener de trapFocus para evitar leaks
   const ctrl = _modalControllers.get(id);
   if(ctrl){ ctrl.abort(); _modalControllers.delete(id); }
-  if(lastFocused) lastFocused.focus();
+  // Restaurar foco solo si el elemento aún existe en el DOM
+  if(lastFocused && lastFocused.isConnected){
+    try{ lastFocused.focus(); }catch(e){}
+  }
 }
 function trapFocus(modalId, container){
   // Abortar listener anterior si existía
@@ -1677,11 +1720,14 @@ function trapFocus(modalId, container){
   if(prev) prev.abort();
   const ctrl = new AbortController();
   _modalControllers.set(modalId, ctrl);
-  const focusables = container.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
-  if(focusables.length){focusables[0].focus()}
+  const focusables = container.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])');
+  if(focusables.length > 0){
+    try{ focusables[0].focus(); }catch(e){}
+  }
   container.addEventListener('keydown', e=>{
     if(e.key!=='Tab') return;
-    const f = container.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
+    const f = container.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])');
+    if(f.length === 0) return;
     const first = f[0], last = f[f.length-1];
     if(e.shiftKey && document.activeElement===first){e.preventDefault();last.focus()}
     else if(!e.shiftKey && document.activeElement===last){e.preventDefault();first.focus()}
@@ -1843,12 +1889,14 @@ function updateXpBar(){
   const cur = currentRank();
   const nxt = nextRank();
   $('rankBadge').textContent = cur.name;
-  $('xpLabel').textContent = state.xp+' XP';
   if(nxt){
-    const range = nxt.min - cur.min;
     const into = state.xp - cur.min;
+    const range = nxt.min - cur.min;
+    $('xpLabel').textContent = into+'/'+range+' → '+nxt.name;
+    $('xpLabel').title = state.xp+' XP totales';
     $('xpFill').style.width = Math.min(100, (into/range)*100)+'%';
   }else{
+    $('xpLabel').textContent = state.xp+' XP · MAX';
     $('xpFill').style.width = '100%';
   }
 }
@@ -2099,11 +2147,12 @@ function initGame(){
     startQuiz();
     startTimer();
     updateStats();
+    updatePowerupsUI();
     return;
   }
   // Daily Challenge: si ya está completado hoy, mostrar mensaje
   if(state.mode==='daily' && state.dailyDone && state.dailyDone.seed===dailySeed()){
-    toast('🌟 Ya completaste el reto de hoy con '+state.dailyDone.score+' pts. Vuelve mañana.','info',{duration:4000});
+    toast('🌟 Ya completaste el reto de hoy con '+state.dailyDone.score+' pts. Próximo en '+timeUntilNextDaily(),'info',{duration:5000});
   }
   // Repaso vacío
   if(state.mode==='repaso' && (!state.errorBag || state.errorBag.length<2)){
@@ -2117,6 +2166,7 @@ function initGame(){
   renderGrid();
   updateStats();
   startTimer();
+  updatePowerupsUI();
   // Instruction text
   setInstruction();
 }
@@ -2204,11 +2254,38 @@ function useHint(){
   $('btnHint').textContent = '💡 Pista ('+state.hintCount+')';
   if(state.hintCount<=0) $('btnHint').disabled = true;
   updateStats();
+  // Feedback visible del coste de la pista
+  toast('💡 Pista usada · -5 pts','warn',{duration:1400});
+  spawnScorePop('-5');
+}
+function spawnScorePop(text){
+  const stat = document.getElementById('statScore');
+  if(!stat || isReducedMotion()) return;
+  const r = stat.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.textContent = text;
+  pop.style.cssText = 'position:fixed;left:'+(r.left+r.width/2)+'px;top:'+(r.top-6)+'px;'+
+    'transform:translate(-50%,0);color:'+(text.startsWith('-')?'#FF6B6B':'#5BD68A')+';'+
+    'font-weight:800;font-size:1.1rem;font-family:"Space Mono",monospace;'+
+    'pointer-events:none;z-index:200;text-shadow:0 0 10px currentColor;'+
+    'transition:transform .9s cubic-bezier(.2,.8,.2,1),opacity .9s ease;';
+  document.body.appendChild(pop);
+  requestAnimationFrame(()=>{
+    pop.style.transform = 'translate(-50%,-30px)';
+    pop.style.opacity = '0';
+  });
+  setTimeout(()=>pop.remove(), 950);
 }
 
 // ============================================================
 // MENU INTERACTIVO
 // ============================================================
+const MENU_CATEGORIES = [
+  {id:'clasicos',  label:'Clásicos',  modes:['basico','avanzado','propiedades','iones','config']},
+  {id:'rapidos',   label:'Rápidos',   modes:['contrarreloj','daily']},
+  {id:'desafios',  label:'Desafíos',  modes:['elite','olimpiada','repaso']},
+  {id:'preguntas', label:'Preguntas', modes:['quiz','enlaces']}
+];
 const MENU_MODES = [
   {id:'basico',      icon:'🟡', label:'Básico',         desc:'Símbolo ↔ nombre del elemento'},
   {id:'avanzado',    icon:'🔴', label:'Avanzado',       desc:'Símbolo ↔ número atómico, período y grupo'},
@@ -2229,16 +2306,29 @@ function buildMenu(){
   const grid = $('menuModeGrid');
   if(!grid) return;
   grid.innerHTML = '';
-  MENU_MODES.forEach(m=>{
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'menu-mode-card';
-    b.setAttribute('role','radio');
-    b.setAttribute('aria-checked','false');
-    b.dataset.menuMode = m.id;
-    b.innerHTML = '<span class="mc-title">'+m.icon+' '+m.label+'</span><span class="mc-desc">'+m.desc+'</span>';
-    b.addEventListener('click', ()=>selectMenuMode(m.id));
-    grid.appendChild(b);
+  const byId = Object.fromEntries(MENU_MODES.map(m=>[m.id,m]));
+  MENU_CATEGORIES.forEach(cat=>{
+    const head = document.createElement('div');
+    head.className = 'menu-cat-label';
+    head.textContent = cat.label;
+    grid.appendChild(head);
+    cat.modes.forEach(mid=>{
+      const m = byId[mid];
+      if(!m) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'menu-mode-card';
+      b.setAttribute('role','radio');
+      b.setAttribute('aria-checked','false');
+      b.dataset.menuMode = m.id;
+      const t = document.createElement('span'); t.className='mc-title';
+      t.appendChild(document.createTextNode(m.icon+' '+m.label));
+      const d = document.createElement('span'); d.className='mc-desc';
+      d.textContent = m.desc;
+      b.appendChild(t); b.appendChild(d);
+      b.addEventListener('click', ()=>selectMenuMode(m.id));
+      grid.appendChild(b);
+    });
   });
   // Level pills
   document.querySelectorAll('#menuLevelRow [data-menu-level]').forEach(b=>{
@@ -2532,7 +2622,9 @@ function bind(){
     });
   });
   $('rangeFontScale').addEventListener('input', e=>{
-    state.a11y.scale = parseFloat(e.target.value);
+    const v = parseFloat(e.target.value);
+    if(isNaN(v)) return;
+    state.a11y.scale = Math.min(1.5, Math.max(0.85, v));
     $('fontScaleVal').textContent = Math.round(state.a11y.scale*100)+'%';
     applyA11y();
     saveState();
