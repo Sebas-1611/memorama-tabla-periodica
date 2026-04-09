@@ -923,6 +923,36 @@ html{font-size:calc(16px * var(--scale-factor, 1))}
   .menu-section{padding:var(--s-3)}
 }
 
+/* Botones legacy ocultos: gana sobre cualquier display de .btn-o */
+.btn-hidden{display:none !important}
+
+/* ===== PROFILE STATS ===== */
+.profile-stats{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(110px,1fr));
+  gap:var(--s-2);
+  margin:var(--s-3) 0 var(--s-4);
+  padding:var(--s-3);
+  background:var(--bg-1);
+  border:1px solid var(--border-subtle);
+  border-radius:var(--r-md);
+}
+.profile-stats .ps-item{text-align:center}
+.profile-stats .ps-val{
+  font-family:'Space Mono',monospace;
+  font-size:var(--fs-lg);
+  font-weight:var(--fw-bold);
+  color:var(--primary);
+  line-height:1;
+}
+.profile-stats .ps-lbl{
+  font-size:var(--fs-2xs);
+  color:var(--text-3);
+  text-transform:uppercase;
+  letter-spacing:.6px;
+  margin-top:4px;
+}
+
 /* ===== HELP HUB MODAL ===== */
 .help-grid{
   display:grid;

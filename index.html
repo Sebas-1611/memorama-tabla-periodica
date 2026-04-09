@@ -150,14 +150,15 @@
   <button id="btnMenu" class="btn-o" type="button" title="Volver al menú">☰ Menú</button>
   <button id="btnRestart" class="btn-primary" type="button">↻ Reiniciar</button>
   <button id="btnHelp" class="btn-o" type="button" title="Pistas, reglas y tendencias">📚 Ayuda</button>
-  <button id="btnCol" class="btn-o" type="button">🔬 Mi Tabla</button>
-  <button id="btnAch" class="btn-o" type="button">🏆 Logros</button>
-  <button id="btnLB" class="btn-o" type="button">🥇 Récords</button>
-  <button id="btnHist" class="btn-o" type="button">📜 Historial</button>
-  <!-- Botones legacy ocultos: el menú de Ayuda los dispara internamente -->
-  <button id="btnHint" class="btn-o" type="button" hidden aria-hidden="true">💡 Pista</button>
-  <button id="btnRules" class="btn-o" type="button" hidden aria-hidden="true">📖 Reglas</button>
-  <button id="btnTrends" class="btn-o" type="button" hidden aria-hidden="true">📊 Tendencias</button>
+  <button id="btnProfile" class="btn-o" type="button" title="Mi Tabla, Logros, Récords e Historial">👤 Perfil</button>
+  <!-- Botones legacy: ocultos del DOM visible, el hub de Ayuda y Perfil los dispara -->
+  <button id="btnHint" class="btn-hidden" type="button" aria-hidden="true">💡 Pista</button>
+  <button id="btnRules" class="btn-hidden" type="button" aria-hidden="true">📖 Reglas</button>
+  <button id="btnTrends" class="btn-hidden" type="button" aria-hidden="true">📊 Tendencias</button>
+  <button id="btnCol" class="btn-hidden" type="button" aria-hidden="true">🔬 Mi Tabla</button>
+  <button id="btnAch" class="btn-hidden" type="button" aria-hidden="true">🏆 Logros</button>
+  <button id="btnLB" class="btn-hidden" type="button" aria-hidden="true">🥇 Récords</button>
+  <button id="btnHist" class="btn-hidden" type="button" aria-hidden="true">📜 Historial</button>
 </div>
 
 <!-- ===== POWER-UPS ROW ===== -->
@@ -203,6 +204,37 @@
 
 <!-- ===== TOAST ROOT ===== -->
 <div id="toastRoot" aria-live="polite" aria-atomic="false"></div>
+
+<!-- ===== MODAL: PERFIL HUB ===== -->
+<div class="modal-overlay" id="modalProfile" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+  <div class="modal">
+    <button class="modal-close" data-close type="button" aria-label="Cerrar">✕</button>
+    <h2 id="profileTitle">👤 Mi Perfil</h2>
+    <div class="profile-stats" id="profileStats"></div>
+    <div class="help-grid">
+      <button type="button" class="help-card" id="profileCol">
+        <span class="hc-ico">🔬</span>
+        <span class="hc-title">Mi Tabla</span>
+        <span class="hc-desc">Elementos que has coleccionado en partidas</span>
+      </button>
+      <button type="button" class="help-card" id="profileAch">
+        <span class="hc-ico">🏆</span>
+        <span class="hc-title">Logros</span>
+        <span class="hc-desc">Insignias y desafíos completados</span>
+      </button>
+      <button type="button" class="help-card" id="profileLB">
+        <span class="hc-ico">🥇</span>
+        <span class="hc-title">Récords</span>
+        <span class="hc-desc">Tus mejores puntuaciones por modo</span>
+      </button>
+      <button type="button" class="help-card" id="profileHist">
+        <span class="hc-ico">📜</span>
+        <span class="hc-title">Historial</span>
+        <span class="hc-desc">Pares emparejados con explicación química</span>
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== MODAL: AYUDA / HELP HUB ===== -->
 <div class="modal-overlay" id="modalHelp" role="dialog" aria-modal="true" aria-labelledby="helpTitle">

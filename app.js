@@ -1806,6 +1806,27 @@ function renderLB(){
   });
 }
 
+function renderProfileStats(){
+  const box = $('profileStats');
+  if(!box) return;
+  const stats = [
+    {val: state.xp || 0,                       lbl: 'XP'},
+    {val: (currentRank()||{name:'—'}).name,    lbl: 'Rango'},
+    {val: state.collection ? state.collection.size : 0, lbl: 'Elementos'},
+    {val: state.achievements ? state.achievements.size : 0, lbl: 'Logros'},
+    {val: state.records ? state.records.length : 0, lbl: 'Récords'}
+  ];
+  box.innerHTML = '';
+  stats.forEach(s=>{
+    const it = document.createElement('div');
+    it.className = 'ps-item';
+    const v = document.createElement('div'); v.className='ps-val'; v.textContent = s.val;
+    const l = document.createElement('div'); l.className='ps-lbl'; l.textContent = s.lbl;
+    it.appendChild(v); it.appendChild(l);
+    box.appendChild(it);
+  });
+}
+
 // ============================================================
 // XP / RANK
 // ============================================================
@@ -2427,6 +2448,12 @@ function bind(){
   $('helpHint').addEventListener('click', ()=>{ closeModal('modalHelp'); useHint(); });
   $('helpRules').addEventListener('click', ()=>{ closeModal('modalHelp'); openModal('modalRules'); });
   $('helpTrends').addEventListener('click', ()=>{ closeModal('modalHelp'); $('trendsPanel').classList.add('open'); });
+  // ===== Profile hub =====
+  $('btnProfile').addEventListener('click', ()=>{ renderProfileStats(); openModal('modalProfile'); });
+  $('profileCol').addEventListener('click', ()=>{ closeModal('modalProfile'); renderCollection(); openModal('modalCollection'); });
+  $('profileAch').addEventListener('click', ()=>{ closeModal('modalProfile'); renderAch(); openModal('modalAch'); });
+  $('profileLB').addEventListener('click', ()=>{ closeModal('modalProfile'); renderLB(); openModal('modalLB'); });
+  $('profileHist').addEventListener('click', ()=>{ closeModal('modalProfile'); $('btnHist').click(); });
   // ===== Fondo animado toggle =====
   $('btnBg').addEventListener('click', ()=>{
     state.a11y.bgAnimated = !state.a11y.bgAnimated;
